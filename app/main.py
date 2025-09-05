@@ -81,13 +81,51 @@ def get_system_id():
         print(f"Warning: Error detecting system ID: {e}, using default value of 1")
         return 1
 
+def get_distance_system_id():
+    """Detect the system ID for the Ping distance sensor, which may differ from GPS/yaw.
+
+    Probes the DISTANCE_SENSOR endpoint across vehicle IDs until a valid response is found.
+    """
+    try:
+        max_vehicle_id = 100
+        for candidate_id in range(1, max_vehicle_id + 1):
+            distance_url = f"{base_url}/vehicles/{candidate_id}/components/194/messages/DISTANCE_SENSOR"
+            try:
+                distance_response = requests.get(distance_url, timeout=0.75)
+                if distance_response.status_code == 200:
+                    try:
+                        payload = distance_response.json()
+                        if isinstance(payload, dict) and ("message" in payload):
+                            # Basic plausibility check for expected keys
+                            message = payload.get("message", {})
+                            if isinstance(message, dict) and ("current_distance" in message or "min_distance" in message or "max_distance" in message):
+                                print(f"Detected distance system ID by probing: {candidate_id}")
+                                return candidate_id
+                    except ValueError:
+                        pass
+            except Exception:
+                pass
+        print("Warning: Could not detect distance system ID via probing, defaulting to 1")
+        return 1
+    except Exception as e:
+        print(f"Warning: Error detecting distance system ID: {e}, using default value of 1")
+        return 1
+
+def get_system_ids():
+    """Detect IDs for navigation (GPS/yaw) and distance sensor separately."""
+    nav_id = get_system_id()
+    distance_id = get_distance_system_id()
+    return {"nav": nav_id, "distance": distance_id}
+
 def get_urls():
-    """Get the correct URLs based on the detected system ID."""
-    system_id = get_system_id()
+    """Get the correct URLs based on detected system IDs for nav and distance."""
+    ids = get_system_ids()
+    nav_id = ids["nav"]
+    distance_id = ids["distance"]
     return {
-        'distance': f"{base_url}/vehicles/{system_id}/components/194/messages/DISTANCE_SENSOR",
-        'gps': f"{base_url}/vehicles/{system_id}/components/1/messages/GLOBAL_POSITION_INT",
-        'yaw': f"{base_url}/vehicles/{system_id}/components/1/messages/ATTITUDE"
+        'distance': f"{base_url}/vehicles/{distance_id}/components/194/messages/DISTANCE_SENSOR",
+        'gps': f"{base_url}/vehicles/{nav_id}/components/1/messages/GLOBAL_POSITION_INT",
+        'yaw': f"{base_url}/vehicles/{nav_id}/components/1/messages/ATTITUDE"
     }
 
 def main():
@@ -96,8 +134,13 @@ def main():
     print("main started")
     
     # Get the correct URLs based on system ID
-    urls = get_urls()
-    print(f"Using system ID: {get_system_id()}")
+    ids = get_system_ids()
+    urls = {
+        'distance': f"{base_url}/vehicles/{ids['distance']}/components/194/messages/DISTANCE_SENSOR",
+        'gps': f"{base_url}/vehicles/{ids['nav']}/components/1/messages/GLOBAL_POSITION_INT",
+        'yaw': f"{base_url}/vehicles/{ids['nav']}/components/1/messages/ATTITUDE"
+    }
+    print(f"Using system IDs - nav: {ids['nav']} distance: {ids['distance']}")
     
     while (logging_active == True): # Main loop for logging data
         distance_response = requests.get(urls['distance'])
