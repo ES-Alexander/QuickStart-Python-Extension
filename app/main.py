@@ -24,30 +24,58 @@ row_counter = 0
 feedback_interval = 5 # Define the feedback interval (in seconds)
 
 def get_system_id():
-    """Detect the correct system ID by checking available vehicles and their autopilot types."""
+    """Detect the correct system ID by probing vehicle IDs until a valid response is found.
+
+    Strategy:
+    1) Try to enumerate vehicles from /vehicles and validate candidates via /info where available.
+    2) If that does not yield a valid ID, probe GLOBAL_POSITION_INT on vehicles/{id} incrementally starting from 1.
+    """
     try:
+        # First attempt: use vehicles listing and autopilot type to identify a valid vehicle ID
         response = requests.get(f"{base_url}/vehicles")
         if response.status_code == 200:
             vehicles = response.json()
             if vehicles and len(vehicles) > 0:
-                # Get vehicle info for each ID
                 for vehicle_id in vehicles:
-                    vehicle_info = requests.get(f"{base_url}/vehicles/{vehicle_id}/info")
-                    if vehicle_info.status_code == 200:
-                        info = vehicle_info.json()
-                        # Check if this is a valid autopilot
-                        autopilot_type = info.get("autopilot", {}).get("type")
-                        valid_autopilots = [
-                            "MAV_AUTOPILOT_GENERIC", 
-                            "MAV_AUTOPILOT_ARDUPILOTMEGA",
-                            "MAV_AUTOPILOT_PX4"
-                        ]
-                        if autopilot_type in valid_autopilots:
-                            print(f"Found valid autopilot: {autopilot_type} with system ID: {vehicle_id}")
-                            return vehicle_id
-                print("Warning: No valid autopilot found, using default value of 1")
-                return 1
-        print("Warning: Could not detect system ID, using default value of 1")
+                    try:
+                        vehicle_info = requests.get(f"{base_url}/vehicles/{vehicle_id}/info")
+                        if vehicle_info.status_code == 200:
+                            info = vehicle_info.json()
+                            autopilot_type = info.get("autopilot", {}).get("type")
+                            valid_autopilots = [
+                                "MAV_AUTOPILOT_GENERIC",
+                                "MAV_AUTOPILOT_ARDUPILOTMEGA",
+                                "MAV_AUTOPILOT_PX4",
+                            ]
+                            if autopilot_type in valid_autopilots:
+                                print(f"Found valid autopilot: {autopilot_type} with system ID: {vehicle_id}")
+                                return vehicle_id
+                    except Exception:
+                        # If querying info fails, continue to probing strategy below
+                        pass
+
+        # Fallback: Incrementally probe GLOBAL_POSITION_INT for vehicle IDs starting at 1
+        # Limit the search range to avoid infinite loops
+        max_vehicle_id = 100
+        for candidate_id in range(1, max_vehicle_id + 1):
+            gps_url = f"{base_url}/vehicles/{candidate_id}/components/1/messages/GLOBAL_POSITION_INT"
+            try:
+                gps_response = requests.get(gps_url, timeout=0.75)
+                if gps_response.status_code == 200:
+                    # Consider it valid if JSON contains a message or a reasonable structure
+                    try:
+                        payload = gps_response.json()
+                        if isinstance(payload, dict) and ("message" in payload or "time_boot_ms" in payload):
+                            print(f"Detected system ID by probing: {candidate_id}")
+                            return candidate_id
+                    except ValueError:
+                        # Non-JSON or invalid payload, treat as not valid
+                        pass
+            except Exception:
+                # Timeout/connection errors: try next candidate
+                pass
+
+        print("Warning: Could not detect system ID via probing, using default value of 1")
         return 1
     except Exception as e:
         print(f"Warning: Error detecting system ID: {e}, using default value of 1")
