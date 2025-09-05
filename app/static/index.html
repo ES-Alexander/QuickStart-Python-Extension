@@ -53,6 +53,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative; /* For floating buttons */
         }
         
         .map-container {
@@ -66,17 +67,89 @@
             height: 100%;
         }
         
+        /* Depth legend styles */
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            font-size: 12px;
+            width: 120px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .legend h4 {
+            margin: 0 0 5px 0;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .legend-gradient {
+            height: 150px;
+            width: 30px;
+            margin: 5px auto;
+            background: linear-gradient(to bottom, 
+                rgb(255, 255, 255) 0%,
+                rgb(180, 210, 255) 20%,
+                rgb(100, 150, 240) 40%,
+                rgb(40, 90, 200) 60%,
+                rgb(10, 30, 160) 80%,
+                rgb(0, 0, 120) 100%);
+            border: 1px solid #444;
+        }
+        
+        .legend-labels {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 140px;
+            margin-left: 40px;
+            margin-top: -145px;
+            font-size: 11px;
+        }
+        
+        /* Floating center map button for mobile */
+        .map-center-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background-color: rgba(33, 33, 33, 0.8);
+            border-radius: 50%;
+            width: 56px;
+            height: 56px;
+            display: none; /* Hidden by default, shown only on very small screens */
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 3px 5px rgba(0, 0, 0, 0.3);
+        }
+        
         .controls {
             display: flex;
+            flex-wrap: wrap; /* Allow buttons to wrap on small screens */
             gap: 8px;
             padding: 12px;
             background-color: #1E1E1E;
+            justify-content: space-between; /* Distribute sections evenly */
+        }
+        
+        .controls-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
         }
         
         .status-panel {
             padding: 16px;
             background-color: #1E1E1E;
             margin-top: 1px;
+            overflow-x: auto; /* Allow horizontal scrolling for the table */
         }
         
         .confidence-high {
@@ -101,11 +174,96 @@
         .v-application--wrap {
             min-height: 100vh;
         }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 600px) {
+            .controls {
+                justify-content: center;
+                flex-direction: column;
+                gap: 16px;
+            }
+            
+            .controls-section {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .title {
+                font-size: 1.2rem;
+            }
+            
+            .logo {
+                width: 30px;
+                height: 30px;
+            }
+            
+            .map-container {
+                min-height: 300px; /* Smaller map on mobile */
+            }
+            
+            .status-panel h4 {
+                margin-top: 0;
+                margin-bottom: 8px;
+                font-size: 16px;
+            }
+            
+            .status-panel {
+                padding: 8px;
+            }
+            
+            .v-data-table th, .v-data-table td {
+                padding: 0 8px !important;
+                font-size: 12px !important;
+            }
+            
+            /* Show floating button on very small screens */
+            @media (max-width: 400px) {
+                .map-center-button {
+                    display: flex;
+                }
+            }
+            
+            /* Mobile legend adjustments */
+            .legend {
+                width: 100px;
+                font-size: 10px;
+                bottom: 70px; /* Above the center button */
+                left: 10px;
+                padding: 5px;
+            }
+            
+            .legend h4 {
+                font-size: 12px;
+            }
+            
+            .legend-gradient {
+                height: 120px;
+                width: 20px;
+            }
+            
+            .legend-labels {
+                height: 110px;
+                margin-top: -115px;
+                margin-left: 30px;
+                font-size: 9px;
+            }
+        }
+        
+        /* Fix for map scrolling issues */
+        .leaflet-container {
+            touch-action: none;
+        }
+        
+        /* Fix for table on mobile */
+        .v-data-table {
+            width: 100%;
+            overflow-x: auto;
+        }
     </style>
     <link href="/static/css/materialdesignicons.min.css" rel="stylesheet">
     <link href="/static/css/vuetify.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/leaflet.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 </head>
 <body>
     <div id="app">
@@ -119,27 +277,62 @@
             <div class="content">
                 <div class="map-container">
                     <div id="map"></div>
+                    <!-- Floating center map button for mobile -->
+                    <div class="map-center-button" @click="onCenterMapButtonClick">
+                        <v-icon color="white">mdi-crosshairs-gps</v-icon>
+                    </div>
+                    <!-- Depth legend -->
+                    <div class="legend" v-if="showLegend">
+                        <h4>Depth (m)</h4>
+                        <div class="legend-gradient"></div>
+                        <div class="legend-labels">
+                            <span>0</span>
+                            <span>20</span>
+                            <span>40</span>
+                            <span>60</span>
+                            <span>80</span>
+                            <span>100</span>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="controls">
-                    <v-btn :disabled="isLoading || simulation.active" outlined rounded text @click="toggleRun">
-                        <v-icon>{{ icon }}</v-icon>
-                    </v-btn>
-                    <v-btn outlined rounded text @click="download">
-                        <v-icon>mdi-download</v-icon>
-                    </v-btn>
-                    <v-spacer></v-spacer>
-                    <v-btn color="amber" :disabled="isLoading || run" outlined rounded text @click="toggleSimulation">
-                        <v-icon left>{{ simulation.active ? 'mdi-stop' : 'mdi-play-circle-outline' }}</v-icon>
-                        {{ simulation.active ? 'Stop Simulation' : 'Start Simulation (5x)' }}
-                    </v-btn>
-                    <v-spacer></v-spacer>
-                    <v-btn outlined rounded text @click="clearHeatmap">
-                        <v-icon left>mdi-delete</v-icon> Clear Map
-                    </v-btn>
-                    <v-btn outlined rounded text @click="onCenterMapButtonClick">
-                        <v-icon left>mdi-crosshairs-gps</v-icon> Center Vehicle
-                    </v-btn>
+                    <!-- Left side - Start/Stop and Download -->
+                    <div class="controls-section">
+                        <v-btn :color="run ? 'error' : 'success'" :disabled="isLoading || simulation.active" 
+                               dark rounded elevation="2" @click="toggleRun">
+                            <v-icon left>{{ run ? 'mdi-stop' : 'mdi-play' }}</v-icon>
+                            {{ run ? 'Stop' : 'Start' }}
+                        </v-btn>
+                        <v-btn color="primary" dark rounded elevation="2" @click="download">
+                            <v-icon left>mdi-download</v-icon>
+                            Download
+                        </v-btn>
+                    </div>
+                    
+                    <!-- Center section - Map Controls -->
+                    <div class="controls-section">
+                        <v-btn color="info" dark rounded elevation="2" @click="onCenterMapButtonClick">
+                            <v-icon left>mdi-crosshairs-gps</v-icon>
+                            Center
+                        </v-btn>
+                        <v-btn color="warning" dark rounded elevation="2" @click="clearHeatmap">
+                            <v-icon left>mdi-delete</v-icon>
+                            Clear
+                        </v-btn>
+                        <v-btn color="info" dark rounded elevation="2" @click="toggleLegend">
+                            <v-icon left>mdi-{{ showLegend ? 'eye-off' : 'eye' }}</v-icon>
+                            {{ showLegend ? 'Hide' : 'Show' }}
+                        </v-btn>
+                    </div>
+                    
+                    <!-- Right side - Simulation -->
+                    <div class="controls-section">
+                        <v-btn color="amber" :disabled="isLoading || run" dark rounded elevation="2" @click="toggleSimulation">
+                            <v-icon left>{{ simulation.active ? 'mdi-stop' : 'mdi-play-circle-outline' }}</v-icon>
+                            {{ simulation.active ? 'Stop Sim' : 'Start Sim (5x)' }}
+                        </v-btn>
+                    </div>
                 </div>
                 
                 <div class="status-panel">
@@ -185,6 +378,8 @@
                     circleMarkers: [],
                     isLoading: false,
                     receivingData: false,
+                    scaleAdded: false,
+                    showLegend: true,
                     simulation: {
                         active: false,
                         dataRows: 0,
@@ -233,13 +428,8 @@
                         }
                         this.status = 'Data logging started.';
                         this.receivingData = true;
-                        this.map.setView([9.2,-133], 10);
-                        L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-                            maxZoom: 19,
-                            attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>'
-                        }).addTo(this.map);
+                        this.resetMap(9.2, -133, 10);
                         this.intervalId = setInterval(this.fetchData, 1000);
-                        L.control.scale({imperial: false}).addTo(this.map);
                     } catch (error) {
                         console.error('Error fetching data:', error);
                         this.status = 'Error: ' + error.message;
@@ -349,11 +539,14 @@
                     if (confidence > 90) {   
                         const radiusInMeters = (depth/100) * Math.tan(12.5 * Math.PI / 180);
                         const radius = radiusInMeters * this.map.getZoomScale(this.map.getZoom());
+                        const fillColor = this.getColor(depth);
+                        
+                        // Create a more visible circle with stronger border
                         const circleMarker = L.circle([lat, lon], {
-                            color: 'blue',
-                            fillColor: this.getColor(depth),
-                            fillOpacity: 0.5,
-                            weight: 0,
+                            color: 'black',       // Black outline for contrast against all colors
+                            fillColor: fillColor,
+                            fillOpacity: 0.7,     // Higher opacity for better visibility
+                            weight: 1,           // Thin but visible border
                             radius: radius
                         });
                         circleMarker.addTo(this.map);
@@ -368,21 +561,34 @@
                 },
                 onCenterMapButtonClick() {
                     this.firstCoordinateReceived = false;
+                    
+                    // If we have data already, center on that
+                    if (this.tableItems.length > 0) {
+                        const item = this.tableItems[0];
+                        this.resetMap(item.latitude, item.longitude, 18);
+                    } else {
+                        // Otherwise reset to default view
+                        this.resetMap(9.2, -133, 10);
+                    }
                 },
                 getColor(depth) {
                     const colorStops = [
-                        {depth: 0, color: [255, 255, 255]},    // White for shallow
-                        {depth: 1000, color: [230, 240, 255]}, 
-                        {depth: 2000, color: [200, 220, 255]},
-                        {depth: 3000, color: [170, 200, 240]},
-                        {depth: 4000, color: [140, 180, 230]},
-                        {depth: 5000, color: [110, 160, 220]},
-                        {depth: 6000, color: [80, 140, 210]},
-                        {depth: 7000, color: [60, 120, 200]},
-                        {depth: 8000, color: [40, 100, 180]},
-                        {depth: 9000, color: [20, 80, 160]},
-                        {depth: 10000, color: [0, 60, 150]}     // Dark blue for deep
+                        {depth: 0, color: [255, 255, 255]},    // Pure white for shallow
+                        {depth: 1000, color: [220, 230, 255]}, 
+                        {depth: 2000, color: [180, 210, 255]},
+                        {depth: 3000, color: [140, 180, 250]},
+                        {depth: 4000, color: [100, 150, 240]},
+                        {depth: 5000, color: [70, 120, 220]},
+                        {depth: 6000, color: [40, 90, 200]},
+                        {depth: 7000, color: [20, 60, 180]},
+                        {depth: 8000, color: [10, 30, 160]},
+                        {depth: 9000, color: [5, 15, 140]},
+                        {depth: 10000, color: [0, 0, 120]}      // Dark blue for deep
                     ];
+                    
+                    // Add higher contrast to circles
+                    const opacity = 0.7; // Higher opacity for better visibility
+                    const strokeWeight = 1; // Add stroke to improve contrast
                     
                     let color1, color2;
                     for (let i = 0; i < colorStops.length - 1; i++) {
@@ -420,8 +626,7 @@
                                 this.simulation.dataRows = result.data_rows || 0;
                                 this.receivingData = true;
                                 this.intervalId = setInterval(this.fetchData, 1000);
-                                this.map.setView([9.2,-133], 10);
-                                L.control.scale({imperial: false}).addTo(this.map);
+                                this.resetMap(9.2, -133, 10);
                                 
                                 // Get more detailed simulation status
                                 const statusResponse = await fetch('/simulation_status');
@@ -454,11 +659,7 @@
                         if (response.data.logging_active) {
                             this.run = true;
                             this.icon = 'mdi-stop';
-                            this.map.setView([9.2,-133], 10);
-                            L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-                                maxZoom: 21,
-                                attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>'
-                            }).addTo(this.map);
+                            this.resetMap(9.2, -133, 10);
                             this.intervalId = setInterval(this.fetchData, 1000);
                         } else {
                             this.run = false;
@@ -475,12 +676,72 @@
                         this.run = false;
                         this.icon = 'mdi-play';
                     }
+                },
+                resetMap(lat, lon, zoom) {
+                    // Remove existing layers to prevent duplicate controls
+                    if (this.map) {
+                        this.map.eachLayer((layer) => {
+                            if (layer instanceof L.TileLayer) {
+                                this.map.removeLayer(layer);
+                            }
+                        });
+                    
+                        // Clear any existing controls including scale
+                        const controls = this.map._controlCorners;
+                        if (controls && controls.bottomleft) {
+                            while (controls.bottomleft.firstChild) {
+                                controls.bottomleft.removeChild(controls.bottomleft.firstChild);
+                            }
+                        }
+                        
+                        // Reset the map view
+                        this.map.setView([lat, lon], zoom);
+                        
+                        // Fix mobile handling if needed
+                        if (L.Browser.mobile) {
+                            // Ensure touch handling is properly set
+                            this.map.tap.enable();
+                            // Disable dragging and re-enable after a slight delay
+                            this.map.dragging.disable();
+                            setTimeout(() => {
+                                this.map.dragging.enable();
+                            }, 500);
+                        }
+                        
+                        // Add base layer
+                        L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                            maxZoom: 21,
+                            attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>'
+                        }).addTo(this.map);
+                        
+                        // Add fresh scale control
+                        L.control.scale({imperial: false}).addTo(this.map);
+                        this.scaleAdded = true;
+                    }
+                },
+                toggleLegend() {
+                    this.showLegend = !this.showLegend;
                 }
             },
             mounted() {
                 this.$nextTick(() => {
                     // Initialize map after DOM is fully rendered
-                    this.map = L.map('map').setView([9.2,-133], 10);
+                    this.map = L.map('map', {
+                        // These options improve mobile handling
+                        tap: true, // Enable tap handler for touch devices
+                        dragging: !L.Browser.mobile, // Disable drag by default on mobile
+                        tap: L.Browser.safari && L.Browser.mobile, // Use tap instead of click for Safari on iOS
+                        bounceAtZoomLimits: false, // Don't bounce at zoom limits
+                        touchZoom: 'center' // Center zoom on mobile touch
+                    }).setView([9.2,-133], 10);
+                    
+                    // Enable dragging after a short delay (prevents scrolling issues)
+                    if (L.Browser.mobile) {
+                        setTimeout(() => {
+                            this.map.dragging.enable();
+                        }, 1000);
+                    }
+                    
                     L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
                         maxZoom: 21,
                         attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>'
@@ -488,6 +749,7 @@
                     
                     // Add scale control
                     L.control.scale({imperial: false}).addTo(this.map);
+                    this.scaleAdded = true;
                     
                     // Add CSS for logo rotation
                     const style = document.createElement('style');
