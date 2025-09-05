@@ -105,15 +105,34 @@ def main():
         yaw_response = requests.get(urls['yaw'])
         if distance_response.status_code == 200 and gps_response.status_code == 200 and yaw_response.status_code == 200: # Check if the requests were successful
             try:
-                distance_data = distance_response.json()['message'] # Extract the data from the responses
-                gps_data = gps_response.json()['message']
-                yaw_data = yaw_response.json()['message']
-            except json.JSONDecodeError as e:
-                print(f"Error decoding JSON response:")
-                print(f"Distance response: {distance_response.text}")
-                print(f"GPS response: {gps_response.text}")
-                print(f"Yaw response: {yaw_response.text}")
-                raise e
+                # Parse JSON safely; some endpoints may return 200 with empty body until first message arrives
+                distance_payload = distance_response.json()
+                gps_payload = gps_response.json()
+                yaw_payload = yaw_response.json()
+
+                if not isinstance(distance_payload, dict) or 'message' not in distance_payload:
+                    print("Distance endpoint returned no message yet; retrying...")
+                    time.sleep(1 / log_rate)
+                    continue
+                if not isinstance(gps_payload, dict) or 'message' not in gps_payload:
+                    print("GPS endpoint returned no message yet; retrying...")
+                    time.sleep(1 / log_rate)
+                    continue
+                if not isinstance(yaw_payload, dict) or 'message' not in yaw_payload:
+                    print("Attitude endpoint returned no message yet; retrying...")
+                    time.sleep(1 / log_rate)
+                    continue
+
+                distance_data = distance_payload['message']
+                gps_data = gps_payload['message']
+                yaw_data = yaw_payload['message']
+            except (json.JSONDecodeError, ValueError) as e:
+                print("Error decoding JSON response; will retry:")
+                print(f"Distance response: {getattr(distance_response, 'text', None)}")
+                print(f"GPS response: {getattr(gps_response, 'text', None)}")
+                print(f"Yaw response: {getattr(yaw_response, 'text', None)}")
+                time.sleep(1 / log_rate)
+                continue
             column_labels = ['Unix Timestamp', 'Date', 'Time','Depth (cm)', 'Confidence (%)', 'Vessel heading (deg)', 'Roll (deg)', 'Pitch (deg)', 'Latitude', 'Longitude', 'Altitude (m)']
             timestamp = int(time.time() * 1000)  # Convert current time to milliseconds
             dt = datetime.fromtimestamp(timestamp / 1000)  # Convert timestamp to datetime object 
